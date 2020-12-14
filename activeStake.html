@@ -1,0 +1,171 @@
+<html>
+<head>
+
+  <script src="./lib/index.iife.js"></script>
+  <script src="./getStats.js"></script> 
+  <script src="https://www.gstatic.com/charts/loader.js"></script>
+
+  <script>
+    function weCanRunNow() {
+      document.getElementById("run").disabled = false
+    }
+
+    function loadGoogleStuff() {
+      google.charts.load('current', {'packages':['corechart']});
+      google.charts.setOnLoadCallback(weCanRunNow);
+    }
+
+    function numberWithCommas(x) {
+      return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    }
+
+    async function calc() {
+
+      const network = document.getElementById("network").value
+      const gather = document.getElementById("gather").value
+
+      const data = await getStats(solanaWeb3,network,gather)
+
+      const status = document.getElementById('status')
+      status.innerHTML = data.status
+
+      if( !data.error ) {
+
+        let pieData = []
+        pieData.push( ['pubkey','allocation' ] )
+
+        const count = document.getElementById('count')
+        count.innerHTML = 'Entries: '+ data.entries.length
+
+        const total = document.getElementById('total')
+        total.innerHTML = 'Total: ' + numberWithCommas( Math.round( data.totalSol ) ) + ''
+
+        const entriesTable = document.getElementById('entriesTable')
+
+        let html = '<table style="width:80%; margin-left: auto; margin-right: auto; border-collapse: collapse;">'
+        html += '<tr><th style="font-size: 14px; border: 1px solid #dddddd;">Entry PubKey</th>'
+        html += '<th style="font-size: 14px; border: 1px solid #dddddd;">Allocation</th></tr>'
+        
+        for( let n=0; n<data.entries.length; n++ ) {
+          const v = data.entries[n]
+          const wholeSol = Math.round( v.allocation / solanaWeb3.LAMPORTS_PER_SOL )
+          const wholeSolString = numberWithCommas( wholeSol )
+          html += '<tr><td style="font-size: 14px; border: 1px solid #dddddd;">'+v.entryPubkey+'</td>'
+          html += '<td style="font-size: 14px; border: 1px solid #dddddd;">'+wholeSolString+'</td></tr>'
+
+          pieData.push( [ v.entryPubkey, wholeSol ] )
+        }
+
+        html += '</table>'
+
+        entriesTable.innerHTML = html   
+
+        const googleData = google.visualization.arrayToDataTable( pieData )
+        const chart = new google.visualization.PieChart(document.getElementById('piechart'))
+
+        const options = {
+               'width': '100%',
+               'height': window.innerHeight * 0.5, //400,
+               'chartArea': {'left': 0, 'top': 20, 'width': '100%', 'height': '100%'},
+           //    'legend': {'position': 'bottom'}
+         }
+
+        //chart.draw(googleData, {'width': 900, 'height':400} )
+        chart.draw(googleData, options )
+        //chart.draw(googleData, {theme: 'maximized'} )
+      } 
+    }
+    function statusUpdStart() {
+      const piechart = document.getElementById('piechart')
+      piechart.innerHTML = ''
+
+      const total = document.getElementById('total')
+      total.innerHTML = ''
+
+      const count = document.getElementById('count')
+      count.innerHTML = ''
+
+      const entriesTable = document.getElementById('entriesTable')
+      entriesTable.innerHTML = ''
+
+      const gather = document.getElementById("gather").value
+
+      const network = document.getElementById("network")
+      const networkSelected = network.options[network.selectedIndex].text;
+
+      const status = document.getElementById('status')
+
+      if ( networkSelected==='testnet' && gather==='AuthorizedStaker' ) {
+        status.innerHTML ="Fetching -- ETA: 2 minutes, leave browser open" 
+
+      } else {
+        status.innerHTML ="-- Fetching --" 
+      }
+    }
+  </script>
+
+</head>
+<body onload="loadGoogleStuff()">
+  <div style="text-align: center; font-weight: bold; padding-top: 5px;">
+    Solana - Active Stake
+  </div>
+  <div style="margin: auto; width: 70%; text-align: center; padding-top: 5px;">
+    Breakdown of all active stake in the system for the current epoch. There are two views "ValidatorStaked" and "AuthorizedStaker".
+  </div>
+  <div style="margin: auto; width: 70%; text-align: center; padding-top: 5px;">
+    <b>ValidatorStaked</b> - breakdown is by validator pubkey. This is the active stake delegated to a particular validator. This is a simple RPC call provided by the node.
+  </div>
+  <div style="margin: auto; width: 70%; text-align: center; padding-top: 5px;">
+    <b>AuthorizedStaker</b> - breakdown is by authorized staker pubkey. This is the total active stake delegated by a particular authorized staker. The calculation is much more complicated, for each stake it needs to 'move through epochs' using warm up and cool down of stake to determine what stake is active in the current epoch. You can see the calculation by looking at <a href='https://github.com/mcf-rocks/active-stake-breakdown.git'>the code</a>. The authorized staker is not exactly the same as the owner, it is the key that controls the delegation of the stake. Until the 7th Jan 2021 the majority of stake is in the form of 'locked stake accounts', the eventual recipients of the funds cannot withdraw but they can stake the funds to validators. 
+  </div>
+  <div style="margin: auto; width: 60%; text-align: center; padding-top: 5px;">
+    Theoretically the totals of both views should be equal. In practice they are only very close, because numbers from RPC calls are 64bit integers (Lamports) but JavaScript loses precision on integers over 2^53. You could use BigInt but I'm not that bothered. Quantities rounded and displayed in Sol.
+  </div>
+
+  <div style="text-align: center; padding-top: 15;">
+  <select name="network" id="network">
+    <option value="https://api.mainnet-beta.solana.com">mainnet</option>
+    <option value="http://testnet.solana.com:8899">testnet</option>
+    <option value="https://devnet.solana.com">devnet</option>
+  </select>
+
+  </div>
+  <div style="text-align: center; padding-top: 15;">
+
+  <select name="gather" id="gather">
+    <option value="AuthorizedStaker">AuthorizedStaker</option>
+    <option value="ValidatorStaked">ValidatorStaked</option>
+  </select>
+
+  </div>
+  <div style="text-align: center; padding-top: 15; padding-bottom: 15">
+
+    <button id="run" onclick="statusUpdStart();calc()" disabled>RUN</button>
+
+  </div>
+
+  <div>
+    <div style="float:left;  width: 50%">
+      <!-- left panel -->
+      <div style="text-align: center; padding-top: 15; font-size: 14px; font-family: 'Courier New', monospace;">
+        <div id="status"></div>
+      </div>
+      <div style="text-align: center; padding-top: 10; font-size: 14px; font-family: 'Courier New', monospace;">
+        <div id="count"></div>
+      </div>
+      <div style="text-align: center; padding-top: 10; font-size: 14px; font-family: 'Courier New', monospace;">
+        <div id="total"></div>
+      </div>
+      <div style="text-align: center; padding-top: 10; font-size: 14px; font-family: 'Courier New', monospace;">
+        <div id="entriesTable"></div>
+      </div>
+    </div>
+    <div style="float:left; width: 50%">
+      <!-- right panel -->
+      <div id="piechart"></div>
+  </div>
+</body>
+</html>
+
+
+
