@@ -1,7 +1,6 @@
 
 
 function solInt(buffer) {
-// appears to be big endian 8 bytes
   let s = "0x"
   for(let n=7;n>=0;n--) {
     s += buffer.slice(n,n+1).toString("hex")
